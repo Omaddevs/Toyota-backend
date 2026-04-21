@@ -1,0 +1,140 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .broadcast-wrap { max-width: 720px; }
+  .broadcast-user-panel {
+    border: 1px solid var(--hairline-color, #ccc);
+    border-radius: 4px;
+    background: var(--body-bg, #fff);
+    max-height: 420px;
+    overflow: auto;
+    margin-top: 8px;
+  }
+  .broadcast-select-all {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--hairline-color, #ccc);
+    background: var(--darkened-bg, #f8f8f8);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    cursor: pointer;
+    user-select: none;
+  }
+  .broadcast-select-all input { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; }
+  .broadcast-user-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--hairline-color, #eee);
+    cursor: pointer;
+    margin: 0;
+    font-weight: normal;
+  }
+  .broadcast-user-row:last-child { border-bottom: none; }
+  .broadcast-user-row:hover { background: var(--selected-bg, #f4f4f4); }
+  .broadcast-user-row input { width: 18px; height: 18px; margin-top: 2px; cursor: pointer; flex-shrink: 0; }
+  .broadcast-user-meta { line-height: 1.4; }
+  .broadcast-user-meta strong { font-weight: 600; }
+  .broadcast-user-meta .email { color: var(--body-quiet-color, #666); font-size: 13px; }
+  .broadcast-hint { color: var(--body-quiet-color, #666); font-size: 13px; margin-top: 6px; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='notifications' %}">Bildirishnomalar</a>
+  &rsaquo; Yuborish
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="broadcast-wrap">
+  <h1>Bir nechta foydalanuvchiga bildirishnoma</h1>
+  <p class="help">Ro‘yxatdan o‘tgan faol foydalanuvchilarni belgilab, sarlavha va matn kiriting.</p>
+
+  <form method="post">
+    {% csrf_token %}
+    <fieldset class="module aligned">
+      <div class="form-row">
+        <label for="id_title">Sarlavha:</label>
+        <input type="text" name="title" id="id_title" required style="width: 100%; max-width: 560px;" />
+      </div>
+      <div class="form-row">
+        <label for="id_body">Matn:</label>
+        <textarea name="body" id="id_body" rows="8" required style="width: 100%; max-width: 560px;"></textarea>
+      </div>
+      <div class="form-row">
+        <div>
+          <label for="broadcast-select-all">Foydalanuvchilar:</label>
+          <p class="broadcast-hint">Alohida belgilang yoki «Hammasini belgilash»dan foydalaning.</p>
+          <div class="broadcast-user-panel">
+            <label class="broadcast-select-all" for="broadcast-select-all">
+              <input type="checkbox" id="broadcast-select-all" />
+              <span>Hammasini belgilash</span>
+              <span style="margin-left: auto; opacity: 0.85; font-weight: 500;">({{ users|length }} ta)</span>
+            </label>
+            {% for u in users %}
+            <label class="broadcast-user-row" for="user-cb-{{ u.pk }}">
+              <input
+                type="checkbox"
+                name="users"
+                value="{{ u.pk }}"
+                id="user-cb-{{ u.pk }}"
+                class="user-notif-cb"
+              />
+              <span class="broadcast-user-meta">
+                <strong>{{ u.username }}</strong>
+                {% if u.email %}
+                <span class="email"><br />{{ u.email }}</span>
+                {% endif %}
+              </span>
+            </label>
+            {% empty %}
+            <p style="padding: 16px; margin: 0;">Faol foydalanuvchi topilmadi.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </fieldset>
+    <div class="submit-row">
+      <input type="submit" class="default" value="Yuborish" />
+      <a href="{% url 'admin:notifications_usernotification_changelist' %}" class="button cancel-link">Bekor qilish</a>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var master = document.getElementById("broadcast-select-all");
+  if (!master) return;
+  var cbs = document.querySelectorAll("input.user-notif-cb");
+  function syncMaster() {
+    var n = 0, t = cbs.length;
+    for (var i = 0; i < cbs.length; i++) {
+      if (cbs[i].checked) n++;
+    }
+    master.checked = t > 0 && n === t;
+    master.indeterminate = n > 0 && n < t;
+  }
+  master.addEventListener("change", function () {
+    for (var i = 0; i < cbs.length; i++) {
+      cbs[i].checked = master.checked;
+    }
+    master.indeterminate = false;
+  });
+  for (var j = 0; j < cbs.length; j++) {
+    cbs[j].addEventListener("change", syncMaster);
+  }
+  syncMaster();
+})();
+</script>
+{% endblock %}
