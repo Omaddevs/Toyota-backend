@@ -25,6 +25,16 @@ python manage.py runserver
 
 Frontend (Vite) allaqachon `vite.config.js` orqali `/api` ni `127.0.0.1:8000` ga proxylaydi.
 
+## Production uchun muhim sozlamalar
+
+- `DJANGO_DEBUG=0`
+- `DJANGO_SECRET_KEY` ni kuchli qiymat bilan almashtiring
+- `DJANGO_ALLOWED_HOSTS=api.sizning-domen.uz`
+- `CORS_ALLOWED_ORIGINS=https://sizning-frontend-domen.uz`
+- `CSRF_TRUSTED_ORIGINS=https://sizning-frontend-domen.uz`
+
+`DJANGO_DEBUG=0` bo‘lganda `settings.py` avtomatik ravishda secure cookie/HSTS/SSL redirect konfiguratsiyalarini yoqadi.
+
 ## Asosiy API yo‘llari
 
 | Yo‘l | Tavsif |

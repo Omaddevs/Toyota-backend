@@ -72,7 +72,19 @@ class Vendor(models.Model):
     slug = models.SlugField("URL slug", max_length=128)
     name = models.CharField("nom", max_length=255)
     district = models.CharField("tuman", max_length=128, blank=True)
-    image = models.URLField("asosiy rasm URL", max_length=2048)
+    image = models.URLField("asosiy rasm URL", max_length=2048, blank=True)
+    image_upload = models.ImageField(
+        "asosiy rasm fayl (upload)",
+        upload_to="vendors/",
+        blank=True,
+        null=True,
+    )
+    story_video_url = models.URLField(
+        "story video URL (YouTube)",
+        max_length=2048,
+        blank=True,
+        help_text="Top to‘yxonalar story popup uchun YouTube link.",
+    )
     gallery = models.JSONField(
         "galereya (URL ro‘yxati)",
         default=list,
@@ -225,6 +237,73 @@ class HomePlacement(models.Model):
                         "vendor": "Top to‘yxonalar faqat «To‘yxona» (venue) kategoriyasidagi vendorlar uchun."
                     }
                 )
+
+
+class TopVenuePlacement(HomePlacement):
+    """Admin uchun alohida Top to‘yxonalar bo‘limi (proxy)."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "Top to‘yxona"
+        verbose_name_plural = "Top to‘yxonalar"
+
+
+class RecommendedPlacement(HomePlacement):
+    """Admin uchun alohida Tavsiya qilamiz bo‘limi (proxy)."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "Tavsiya"
+        verbose_name_plural = "Tavsiya qilamiz"
+
+
+class VenueVendor(Vendor):
+    class Meta:
+        proxy = True
+        verbose_name = "To‘yxona"
+        verbose_name_plural = "To‘yxona"
+
+
+class MediaVendor(Vendor):
+    class Meta:
+        proxy = True
+        verbose_name = "FotoStudio"
+        verbose_name_plural = "FotoStudio"
+
+
+class AttireVendor(Vendor):
+    class Meta:
+        proxy = True
+        verbose_name = "Kelin va kuyov liboslari"
+        verbose_name_plural = "Kelin va kuyov liboslari"
+
+
+class TransportVendor(Vendor):
+    class Meta:
+        proxy = True
+        verbose_name = "Kartej"
+        verbose_name_plural = "Kartej"
+
+
+class McVendor(Vendor):
+    class Meta:
+        proxy = True
+        verbose_name = "Honanda"
+        verbose_name_plural = "Honanda"
+
+
+class DecorVendor(Vendor):
+    class Meta:
+        proxy = True
+        verbose_name = "Dekor va zal bezatish"
+        verbose_name_plural = "Dekor va zal bezatish"
+
+
+class MarryMeVendor(Vendor):
+    class Meta:
+        proxy = True
+        verbose_name = "Marry me joy va taklif"
+        verbose_name_plural = "Marry me joy va taklif"
 
 
 class UserProfile(models.Model):

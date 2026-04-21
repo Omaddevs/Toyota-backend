@@ -2,11 +2,20 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from .models import (
+    AttireVendor,
     Category,
+    DecorVendor,
     HomePlacement,
+    MarryMeVendor,
+    McVendor,
+    MediaVendor,
     PromoPost,
+    RecommendedPlacement,
+    TopVenuePlacement,
+    TransportVendor,
     UserProfile,
     Vendor,
+    VenueVendor,
     VendorReview,
 )
 
@@ -55,7 +64,7 @@ class VendorAdmin(admin.ModelAdmin):
         "sort_order",
     )
     list_filter = ("category", "is_published", "district")
-    search_fields = ("code", "name", "slug", "district", "phone", "telegram")
+    search_fields = ("code", "name", "slug", "district", "phone", "telegram", "story_video_url")
     ordering = ("category", "sort_order", "name")
     prepopulated_fields = {"slug": ("name",)}
     readonly_fields = ("review_count_cached", "id")
@@ -80,6 +89,8 @@ class VendorAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "image",
+                    "image_upload",
+                    "story_video_url",
                     "gallery",
                     "price_label",
                     "price_note",
@@ -143,6 +154,100 @@ class HomePlacementAdmin(admin.ModelAdmin):
         return obj.vendor.category_id
 
 
+@admin.register(TopVenuePlacement)
+class TopVenuePlacementAdmin(admin.ModelAdmin):
+    list_display = ("sort_order", "vendor", "vendor_category")
+    search_fields = ("vendor__name", "vendor__code")
+    ordering = ("sort_order",)
+    fields = ("sort_order", "vendor")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.filter(section=HomePlacement.SECTION_TOP_VENUES)
+
+    def save_model(self, request, obj, form, change):
+        obj.section = HomePlacement.SECTION_TOP_VENUES
+        super().save_model(request, obj, form, change)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "vendor":
+            kwargs["queryset"] = Vendor.objects.filter(category_id="venue").order_by("name")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    @admin.display(description="Kategoriya")
+    def vendor_category(self, obj):
+        return obj.vendor.category_id
+
+
+@admin.register(RecommendedPlacement)
+class RecommendedPlacementAdmin(admin.ModelAdmin):
+    list_display = ("sort_order", "vendor", "vendor_category")
+    search_fields = ("vendor__name", "vendor__code")
+    ordering = ("sort_order",)
+    fields = ("sort_order", "vendor")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.filter(section=HomePlacement.SECTION_RECOMMENDED)
+
+    def save_model(self, request, obj, form, change):
+        obj.section = HomePlacement.SECTION_RECOMMENDED
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description="Kategoriya")
+    def vendor_category(self, obj):
+        return obj.vendor.category_id
+
+
+class _CategoryVendorProxyAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "district", "is_published", "sort_order")
+    search_fields = ("code", "name", "district", "phone")
+    ordering = ("sort_order", "name")
+
+    category_code = None
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if self.category_code:
+            qs = qs.filter(category_id=self.category_code)
+        return qs
+
+
+@admin.register(VenueVendor)
+class VenueVendorAdmin(_CategoryVendorProxyAdmin):
+    category_code = "venue"
+
+
+@admin.register(MediaVendor)
+class MediaVendorAdmin(_CategoryVendorProxyAdmin):
+    category_code = "media"
+
+
+@admin.register(AttireVendor)
+class AttireVendorAdmin(_CategoryVendorProxyAdmin):
+    category_code = "attire"
+
+
+@admin.register(TransportVendor)
+class TransportVendorAdmin(_CategoryVendorProxyAdmin):
+    category_code = "transport"
+
+
+@admin.register(McVendor)
+class McVendorAdmin(_CategoryVendorProxyAdmin):
+    category_code = "mc"
+
+
+@admin.register(DecorVendor)
+class DecorVendorAdmin(_CategoryVendorProxyAdmin):
+    category_code = "decor"
+
+
+@admin.register(MarryMeVendor)
+class MarryMeVendorAdmin(_CategoryVendorProxyAdmin):
+    category_code = "marryme"
+
+
 class UserProfileInline(admin.StackedInline):
     model = UserProfile
     extra = 0
@@ -156,6 +261,41 @@ class UserAdmin(BaseUserAdmin):
 
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
+
+
+def _custom_get_app_list(request, app_label=None):
+    app_list = admin.AdminSite.get_app_list(admin.site, request, app_label)
+    for app in app_list:
+        if app.get("app_label") != "catalog":
+            continue
+        models = app.get("models", [])
+        hidden_duplicates = {
+            "vendor",
+            "homeplacement",
+        }
+        models = [m for m in models if m.get("object_name", "").lower() not in hidden_duplicates]
+        order = {
+            "category": 0,
+            "promopost": 1,
+            "vendorreview": 2,
+            "topvenueplacement": 100,  # Bosh sahifa joylashuvlaridan keyin
+            "recommendedplacement": 101,
+            "venuevendor": 102,
+            "mediavendor": 103,
+            "attirevendor": 104,
+            "transportvendor": 105,
+            "mcvendor": 106,
+            "decorvendor": 107,
+            "marrymevendor": 108,
+        }
+        app["models"] = sorted(
+            models,
+            key=lambda m: (order.get(m.get("object_name", "").lower(), 50), m.get("name", "")),
+        )
+    return app_list
+
+
+admin.site.get_app_list = _custom_get_app_list
 
 admin.site.site_header = "ToyMakon boshqaruvi"
 admin.site.site_title = "ToyMakon"

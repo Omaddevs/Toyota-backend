@@ -35,12 +35,14 @@ class VendorReviewPublicSerializer(serializers.ModelSerializer):
 
 
 class VendorSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
     categoryId = serializers.CharField(source="category_id", read_only=True)
     priceLabel = serializers.CharField(source="price_label")
     priceNote = serializers.CharField(source="price_note", allow_blank=True)
     footerLine = serializers.CharField(source="footer_line", allow_blank=True)
     footerIcon = serializers.CharField(source="footer_icon", allow_blank=True)
     reviewCount = serializers.IntegerField(source="review_count_cached", read_only=True)
+    storyVideoUrl = serializers.CharField(source="story_video_url", allow_blank=True)
     rating = serializers.FloatField()
     reviews = VendorReviewPublicSerializer(many=True, read_only=True)
     id = serializers.CharField(source="code", read_only=True)
@@ -54,6 +56,7 @@ class VendorSerializer(serializers.ModelSerializer):
             "name",
             "district",
             "image",
+            "storyVideoUrl",
             "gallery",
             "priceLabel",
             "priceNote",
@@ -71,14 +74,23 @@ class VendorSerializer(serializers.ModelSerializer):
             "specs",
         )
 
+    def get_image(self, obj):
+        request = self.context.get("request")
+        if obj.image_upload:
+            url = obj.image_upload.url
+            return request.build_absolute_uri(url) if request else url
+        return obj.image
+
 
 class VendorListSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
     categoryId = serializers.CharField(source="category_id", read_only=True)
     priceLabel = serializers.CharField(source="price_label")
     priceNote = serializers.CharField(source="price_note", allow_blank=True)
     footerLine = serializers.CharField(source="footer_line", allow_blank=True)
     footerIcon = serializers.CharField(source="footer_icon", allow_blank=True)
     reviewCount = serializers.IntegerField(source="review_count_cached", read_only=True)
+    storyVideoUrl = serializers.CharField(source="story_video_url", allow_blank=True)
     rating = serializers.FloatField()
     id = serializers.CharField(source="code", read_only=True)
 
@@ -91,6 +103,7 @@ class VendorListSerializer(serializers.ModelSerializer):
             "name",
             "district",
             "image",
+            "storyVideoUrl",
             "gallery",
             "priceLabel",
             "priceNote",
@@ -106,6 +119,13 @@ class VendorListSerializer(serializers.ModelSerializer):
             "description",
             "specs",
         )
+
+    def get_image(self, obj):
+        request = self.context.get("request")
+        if obj.image_upload:
+            url = obj.image_upload.url
+            return request.build_absolute_uri(url) if request else url
+        return obj.image
 
 
 class PromoPostSerializer(serializers.ModelSerializer):
@@ -128,7 +148,16 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "username", "email", "first_name", "last_name", "full_name", "phone")
+        fields = (
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "full_name",
+            "phone",
+            "is_staff",
+        )
 
     def get_full_name(self, obj):
         p = getattr(obj, "profile", None)

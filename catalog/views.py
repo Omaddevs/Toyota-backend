@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -5,7 +6,7 @@ from .filters import CategoryFilter, VendorFilter
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -147,6 +148,103 @@ class HomeView(APIView):
                 "recommended": VendorListSerializer(rec_vendors, many=True).data,
             }
         )
+
+
+class TopVenuesManageView(APIView):
+    """Top to‘yxonalarni boshqarish (faqat admin/staff)."""
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        placements = HomePlacement.objects.filter(
+            section=HomePlacement.SECTION_TOP_VENUES
+        ).select_related("vendor", "vendor__category").order_by("sort_order")
+        items = [
+            {
+                "vendor_code": hp.vendor.code,
+                "vendor_name": hp.vendor.name,
+                "sort_order": hp.sort_order,
+                "story_video_url": hp.vendor.story_video_url or "",
+            }
+            for hp in placements
+            if hp.vendor.is_published and hp.vendor.category_id == "venue"
+        ]
+        all_venues = Vendor.objects.filter(
+            is_published=True, category_id="venue"
+        ).order_by("name")
+        venue_options = [{"code": v.code, "name": v.name} for v in all_venues]
+        return Response({"items": items, "venue_options": venue_options})
+
+    def put(self, request):
+        payload = request.data.get("items", [])
+        if not isinstance(payload, list):
+            return Response(
+                {"detail": "`items` list bo‘lishi kerak."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        normalized = []
+        seen = set()
+        for idx, raw in enumerate(payload):
+            if not isinstance(raw, dict):
+                return Response(
+                    {"detail": f"{idx + 1}-element noto‘g‘ri formatda."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            code = str(raw.get("vendor_code", "")).strip()
+            if not code:
+                return Response(
+                    {"detail": f"{idx + 1}-elementda vendor_code yo‘q."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if code in seen:
+                return Response(
+                    {"detail": f"Vendor takrorlangan: {code}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            seen.add(code)
+            normalized.append(
+                {
+                    "vendor_code": code,
+                    "sort_order": idx,
+                    "story_video_url": str(raw.get("story_video_url", "")).strip(),
+                }
+            )
+
+        allowed = {
+            v.code: v
+            for v in Vendor.objects.filter(
+                code__in=[it["vendor_code"] for it in normalized],
+                is_published=True,
+                category_id="venue",
+            )
+        }
+        missing = [it["vendor_code"] for it in normalized if it["vendor_code"] not in allowed]
+        if missing:
+            return Response(
+                {"detail": f"Topilmadi yoki venue emas: {', '.join(missing)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            for it in normalized:
+                vendor = allowed[it["vendor_code"]]
+                if vendor.story_video_url != it["story_video_url"]:
+                    vendor.story_video_url = it["story_video_url"]
+                    vendor.save(update_fields=["story_video_url", "updated_at"])
+
+            HomePlacement.objects.filter(section=HomePlacement.SECTION_TOP_VENUES).delete()
+            HomePlacement.objects.bulk_create(
+                [
+                    HomePlacement(
+                        section=HomePlacement.SECTION_TOP_VENUES,
+                        sort_order=it["sort_order"],
+                        vendor=allowed[it["vendor_code"]],
+                    )
+                    for it in normalized
+                ]
+            )
+
+        return self.get(request)
 
 
 @api_view(["GET"])

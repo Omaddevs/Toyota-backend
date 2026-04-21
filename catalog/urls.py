@@ -12,6 +12,7 @@ router.register("promo-posts", views.PromoPostViewSet, basename="promopost")
 urlpatterns = [
     path("", include(router.urls)),
     path("home/", views.HomeView.as_view()),
+    path("admin/top-venues/", views.TopVenuesManageView.as_view()),
     path("auth/register/", views.RegisterView.as_view()),
     path("auth/token/", views.ToyTokenView.as_view()),
     path("auth/token/refresh/", TokenRefreshView.as_view()),
