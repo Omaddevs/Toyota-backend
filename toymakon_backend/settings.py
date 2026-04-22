@@ -38,6 +38,9 @@ ALLOWED_HOSTS = [
     ).split(",")
     if h.strip()
 ]
+render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()
+if render_host and render_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_host)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
