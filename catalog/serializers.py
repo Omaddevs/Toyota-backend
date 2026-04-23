@@ -72,6 +72,7 @@ class VendorSerializer(serializers.ModelSerializer):
             "reviews",
             "description",
             "specs",
+            "view_count",
         )
 
     def get_image(self, obj):
@@ -118,6 +119,7 @@ class VendorListSerializer(serializers.ModelSerializer):
             "telegram",
             "description",
             "specs",
+            "view_count",
         )
 
     def get_image(self, obj):

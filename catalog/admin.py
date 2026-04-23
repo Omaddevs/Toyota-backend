@@ -61,13 +61,14 @@ class VendorAdmin(admin.ModelAdmin):
         "is_published",
         "rating",
         "review_count_cached",
+        "view_count",
         "sort_order",
     )
     list_filter = ("category", "is_published", "district")
     search_fields = ("code", "name", "slug", "district", "phone", "telegram", "story_video_url")
     ordering = ("category", "sort_order", "name")
     prepopulated_fields = {"slug": ("name",)}
-    readonly_fields = ("review_count_cached", "id")
+    readonly_fields = ("review_count_cached", "view_count", "id")
     inlines = [VendorReviewInline]
     fieldsets = (
         (
@@ -104,7 +105,7 @@ class VendorAdmin(admin.ModelAdmin):
             "Aloqa va joy",
             {"fields": ("district", "phone", "telegram", "location", "tagline", "description")},
         ),
-        ("Reyting (sharhlar bilan yangilanadi)", {"fields": ("rating", "review_count_cached")}),
+        ("Reyting va Ko'rishlar", {"fields": ("rating", "review_count_cached", "view_count")}),
         ("Qo‘shimcha", {"fields": ("specs",)}),
     )
     actions = ["make_published", "make_unpublished", "recalculate_ratings"]
@@ -200,12 +201,12 @@ class RecommendedPlacementAdmin(admin.ModelAdmin):
 
 
 class _CategoryVendorProxyAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "district", "is_published", "sort_order")
+    list_display = ("code", "name", "district", "is_published", "view_count", "sort_order")
     search_fields = ("code", "name", "district", "phone")
     ordering = ("sort_order", "name")
     exclude = ("category",)
     prepopulated_fields = {"slug": ("name",)}
-    readonly_fields = ("review_count_cached", "id")
+    readonly_fields = ("review_count_cached", "view_count", "id")
 
     category_code = None
 

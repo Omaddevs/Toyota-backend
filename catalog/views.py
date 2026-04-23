@@ -88,6 +88,13 @@ class VendorViewSet(viewsets.ReadOnlyModelViewSet):
             return VendorSerializer
         return VendorListSerializer
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        Vendor.objects.filter(pk=instance.pk).update(view_count=instance.view_count + 1)
+        instance.refresh_from_db(fields=["view_count"])
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
 
 class PromoPostViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PromoPost.objects.filter(is_active=True)

@@ -118,6 +118,7 @@ class Vendor(models.Model):
     )
     is_published = models.BooleanField("saytda ko‘rinsin", default=True)
     sort_order = models.PositiveIntegerField("ichki tartib", default=0)
+    view_count = models.PositiveIntegerField("ko‘rishlar soni", default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
