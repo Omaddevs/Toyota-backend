@@ -65,7 +65,7 @@ class Vendor(models.Model):
     )
     category = models.ForeignKey(
         Category,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="vendors",
         verbose_name="kategoriya",
     )
