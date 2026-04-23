@@ -204,6 +204,8 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
     search_fields = ("code", "name", "district", "phone")
     ordering = ("sort_order", "name")
     exclude = ("category",)
+    prepopulated_fields = {"slug": ("name",)}
+    readonly_fields = ("review_count_cached", "id")
 
     category_code = None
 
@@ -215,7 +217,15 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if self.category_code:
-            obj.category = Category.objects.get(pk=self.category_code)
+            category, created = Category.objects.get_or_create(
+                pk=self.category_code,
+                defaults={
+                    "title": self.category_code.capitalize(),
+                    "slug": self.category_code,
+                    "short_label": self.category_code.capitalize(),
+                }
+            )
+            obj.category = category
         super().save_model(request, obj, form, change)
 
 
