@@ -5,6 +5,14 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+try:
+    import pymysql
+
+    pymysql.install_as_MySQLdb()
+except ImportError:
+    pass
+
+import dj_database_url
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 
@@ -89,8 +97,28 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "toymakon_backend.wsgi.application"
 
-# --- Database: SQLite by default; optional MySQL via env ---
-if os.environ.get("MYSQL_DATABASE"):
+# --- Database (priority): DATABASE_URL → PostgreSQL env → MySQL → SQLite ---
+_database_url = os.environ.get("DATABASE_URL", "").strip()
+if _database_url:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            _database_url,
+            conn_max_age=600,
+            ssl_require=env_bool("DATABASE_SSL_REQUIRE", False),
+        )
+    }
+elif os.environ.get("POSTGRES_DB"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ["POSTGRES_DB"],
+            "USER": os.environ.get("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+            "HOST": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        }
+    }
+elif os.environ.get("MYSQL_DATABASE"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
