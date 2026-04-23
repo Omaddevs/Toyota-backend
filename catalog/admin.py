@@ -203,6 +203,7 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "district", "is_published", "sort_order")
     search_fields = ("code", "name", "district", "phone")
     ordering = ("sort_order", "name")
+    exclude = ("category",)
 
     category_code = None
 
@@ -211,6 +212,11 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
         if self.category_code:
             qs = qs.filter(category_id=self.category_code)
         return qs
+
+    def save_model(self, request, obj, form, change):
+        if self.category_code:
+            obj.category = Category.objects.get(pk=self.category_code)
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(VenueVendor)
