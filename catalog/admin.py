@@ -209,6 +209,7 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
     readonly_fields = ("review_count_cached", "view_count", "id")
 
     category_code = None
+    category_name = ""
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -221,9 +222,9 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
             category, created = Category.objects.get_or_create(
                 pk=self.category_code,
                 defaults={
-                    "title": self.category_code.capitalize(),
+                    "title": self.category_name or self.category_code.capitalize(),
                     "slug": self.category_code,
-                    "short_label": self.category_code.capitalize(),
+                    "short_label": self.category_name or self.category_code.capitalize(),
                 }
             )
             obj.category = category
@@ -233,36 +234,43 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
 @admin.register(VenueVendor)
 class VenueVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "venue"
+    category_name = "To'yxona"
 
 
 @admin.register(MediaVendor)
 class MediaVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "media"
+    category_name = "FotoStudio"
 
 
 @admin.register(AttireVendor)
 class AttireVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "attire"
+    category_name = "Kelin va kuyov liboslari"
 
 
 @admin.register(TransportVendor)
 class TransportVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "transport"
+    category_name = "Kartej"
 
 
 @admin.register(McVendor)
 class McVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "mc"
+    category_name = "Honanda"
 
 
 @admin.register(DecorVendor)
 class DecorVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "decor"
+    category_name = "Dekor va zal bezatish"
 
 
 @admin.register(MarryMeVendor)
 class MarryMeVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "marryme"
+    category_name = "Marry me joy va taklif"
 
 
 class UserProfileInline(admin.StackedInline):
