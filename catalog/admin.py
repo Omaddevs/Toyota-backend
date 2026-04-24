@@ -200,14 +200,9 @@ class RecommendedPlacementAdmin(admin.ModelAdmin):
         return obj.vendor.category_id
 
 
-class _CategoryVendorProxyAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "district", "is_published", "view_count", "sort_order")
-    search_fields = ("code", "name", "district", "phone")
-    ordering = ("sort_order", "name")
-    prepopulated_fields = {"slug": ("name",)}
-    readonly_fields = ("review_count_cached", "view_count", "id")
-
+class _CategoryVendorProxyAdmin(VendorAdmin):
     category_code = None
+
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
