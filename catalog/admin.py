@@ -204,12 +204,10 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "district", "is_published", "view_count", "sort_order")
     search_fields = ("code", "name", "district", "phone")
     ordering = ("sort_order", "name")
-    exclude = ("category",)
     prepopulated_fields = {"slug": ("name",)}
     readonly_fields = ("review_count_cached", "view_count", "id")
 
     category_code = None
-    category_name = ""
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -217,60 +215,48 @@ class _CategoryVendorProxyAdmin(admin.ModelAdmin):
             qs = qs.filter(category_id=self.category_code)
         return qs
 
-    def save_model(self, request, obj, form, change):
-        if self.category_code:
-            category, created = Category.objects.get_or_create(
-                pk=self.category_code,
-                defaults={
-                    "title": self.category_name or self.category_code.capitalize(),
-                    "slug": self.category_code,
-                    "short_label": self.category_name or self.category_code.capitalize(),
-                }
-            )
-            obj.category = category
-        super().save_model(request, obj, form, change)
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "category" and self.category_code:
+            # Set initial value for the category field
+            category = Category.objects.filter(pk=self.category_code).first()
+            if category:
+                kwargs["initial"] = category.pk
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(VenueVendor)
 class VenueVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "venue"
-    category_name = "To'yxona"
 
 
 @admin.register(MediaVendor)
 class MediaVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "media"
-    category_name = "FotoStudio"
 
 
 @admin.register(AttireVendor)
 class AttireVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "attire"
-    category_name = "Kelin va kuyov liboslari"
 
 
 @admin.register(TransportVendor)
 class TransportVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "transport"
-    category_name = "Kartej"
 
 
 @admin.register(McVendor)
 class McVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "mc"
-    category_name = "Honanda"
 
 
 @admin.register(DecorVendor)
 class DecorVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "decor"
-    category_name = "Dekor va zal bezatish"
 
 
 @admin.register(MarryMeVendor)
 class MarryMeVendorAdmin(_CategoryVendorProxyAdmin):
     category_code = "marryme"
-    category_name = "Marry me joy va taklif"
 
 
 class UserProfileInline(admin.StackedInline):
