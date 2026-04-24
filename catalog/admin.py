@@ -276,7 +276,6 @@ def _custom_get_app_list(request, app_label=None):
             continue
         models = app.get("models", [])
         hidden_duplicates = {
-            "vendor",
             "homeplacement",
         }
         models = [m for m in models if m.get("object_name", "").lower() not in hidden_duplicates]
@@ -284,6 +283,7 @@ def _custom_get_app_list(request, app_label=None):
             "category": 0,
             "promopost": 1,
             "vendorreview": 2,
+            "vendor": 3,
             "topvenueplacement": 100,  # Bosh sahifa joylashuvlaridan keyin
             "recommendedplacement": 101,
             "venuevendor": 102,
