@@ -61,14 +61,13 @@ class VendorAdmin(admin.ModelAdmin):
         "is_published",
         "rating",
         "review_count_cached",
-        "view_count",
         "sort_order",
     )
     list_filter = ("category", "is_published", "district")
     search_fields = ("code", "name", "slug", "district", "phone", "telegram", "story_video_url")
     ordering = ("category", "sort_order", "name")
     prepopulated_fields = {"slug": ("name",)}
-    readonly_fields = ("review_count_cached", "view_count", "id")
+    readonly_fields = ("review_count_cached", "id")
     inlines = [VendorReviewInline]
     fieldsets = (
         (
@@ -105,7 +104,7 @@ class VendorAdmin(admin.ModelAdmin):
             "Aloqa va joy",
             {"fields": ("district", "phone", "telegram", "location", "tagline", "description")},
         ),
-        ("Reyting va Ko'rishlar", {"fields": ("rating", "review_count_cached", "view_count")}),
+        ("Statistika", {"fields": ("rating", "review_count_cached")}),
         ("Qo‘shimcha", {"fields": ("specs",)}),
     )
     actions = ["make_published", "make_unpublished", "recalculate_ratings"]
@@ -136,8 +135,8 @@ class VendorReviewAdmin(admin.ModelAdmin):
 
 @admin.register(PromoPost)
 class PromoPostAdmin(admin.ModelAdmin):
-    list_display = ("title", "slug", "badge", "sort_order", "view_count", "is_active")
-    list_filter = ("is_active",)
+    list_display = ("title", "category", "slug", "badge", "sort_order", "is_active")
+    list_filter = ("is_active", "category")
     search_fields = ("title", "slug", "path")
     ordering = ("sort_order",)
     prepopulated_fields = {"slug": ("title",)}

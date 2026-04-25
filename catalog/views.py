@@ -4,7 +4,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .filters import CategoryFilter, VendorFilter
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
@@ -88,27 +88,11 @@ class VendorViewSet(viewsets.ReadOnlyModelViewSet):
             return VendorSerializer
         return VendorListSerializer
 
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        Vendor.objects.filter(pk=instance.pk).update(view_count=instance.view_count + 1)
-        instance.refresh_from_db(fields=["view_count"])
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-
-
 class PromoPostViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PromoPost.objects.filter(is_active=True)
     serializer_class = PromoPostSerializer
     lookup_field = "slug"
     pagination_class = None
-
-    @action(detail=True, methods=["post"], permission_classes=[])
-    def record_view(self, request, slug=None):
-        post = self.get_object()
-        PromoPost.objects.filter(pk=post.pk).update(view_count=post.view_count + 1)
-        post.refresh_from_db(fields=["view_count"])
-        return Response(PromoPostSerializer(post).data)
-
 
 class HomeView(APIView):
     """Bosh sahifa bloklari: kategoriyalar, top to‘yxonalar, tavsiya."""

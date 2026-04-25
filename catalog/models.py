@@ -176,13 +176,18 @@ class VendorReview(models.Model):
 class PromoPost(models.Model):
     """Bosh sahifa karuseli — reklama / banner."""
 
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name="promo_posts",
+        verbose_name="kategoriya",
+    )
     slug = models.SlugField(unique=True, max_length=64)
     badge = models.CharField("badge", max_length=64, blank=True)
     title = models.CharField("sarlavha", max_length=255)
     path = models.CharField("yo‘nalish (masalan /category/toyxona)", max_length=255)
     background_url = models.URLField("fon rasm URL", max_length=2048)
     sort_order = models.PositiveSmallIntegerField("tartib", default=0)
-    view_count = models.PositiveIntegerField("ko‘rishlar", default=0)
     is_active = models.BooleanField("faol", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

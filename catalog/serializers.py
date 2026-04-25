@@ -131,16 +131,18 @@ class VendorListSerializer(serializers.ModelSerializer):
 
 
 class PromoPostSerializer(serializers.ModelSerializer):
+    categoryId = serializers.CharField(source="category_id", read_only=True)
+
     class Meta:
         model = PromoPost
         fields = (
             "slug",
+            "categoryId",
             "badge",
             "title",
             "path",
             "background_url",
             "sort_order",
-            "view_count",
         )
 
 
