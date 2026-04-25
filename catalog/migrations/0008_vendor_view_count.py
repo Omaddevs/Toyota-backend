@@ -3,6 +3,36 @@
 from django.db import migrations, models
 
 
+def add_view_count_if_missing(apps, schema_editor):
+    Vendor = apps.get_model("catalog", "Vendor")
+    table_name = Vendor._meta.db_table
+    with schema_editor.connection.cursor() as cursor:
+        columns = {
+            col.name for col in schema_editor.connection.introspection.get_table_description(cursor, table_name)
+        }
+    if "view_count" in columns:
+        return
+
+    field = models.PositiveIntegerField(default=0, verbose_name="ko‘rishlar soni")
+    field.set_attributes_from_name("view_count")
+    schema_editor.add_field(Vendor, field)
+
+
+def remove_view_count_if_exists(apps, schema_editor):
+    Vendor = apps.get_model("catalog", "Vendor")
+    table_name = Vendor._meta.db_table
+    with schema_editor.connection.cursor() as cursor:
+        columns = {
+            col.name for col in schema_editor.connection.introspection.get_table_description(cursor, table_name)
+        }
+    if "view_count" not in columns:
+        return
+
+    field = models.PositiveIntegerField(default=0, verbose_name="ko‘rishlar soni")
+    field.set_attributes_from_name("view_count")
+    schema_editor.remove_field(Vendor, field)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,9 +40,16 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='vendor',
-            name='view_count',
-            field=models.PositiveIntegerField(default=0, verbose_name='ko‘rishlar soni'),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunPython(add_view_count_if_missing, remove_view_count_if_exists),
+            ],
+            state_operations=[
+                migrations.AddField(
+                    model_name="vendor",
+                    name="view_count",
+                    field=models.PositiveIntegerField(default=0, verbose_name="ko‘rishlar soni"),
+                ),
+            ],
         ),
     ]
