@@ -1,8 +1,14 @@
 import os
+import random
+import string
+import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count, F, Prefetch
+from django.db.models import Count, Exists, F, OuterRef, Prefetch
+from django.utils import timezone
+from datetime import timedelta
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .filters import CategoryFilter, VendorFilter
@@ -17,20 +23,44 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import Category, HomePlacement, PromoPost, Vendor, VendorReview
+from .models import Category, HomePlacement, PhoneOTP, PromoPost, Vendor, VendorReview
 from .serializers import (
     CategoryPublicSerializer,
     CategoryWriteSerializer,
+    CompleteRegistrationSerializer,
     PromoPostSerializer,
     PromoPostWriteSerializer,
     RegisterSerializer,
+    SendOTPSerializer,
     UserAdminSerializer,
     UserSerializer,
     VendorListSerializer,
     VendorSerializer,
     VendorWriteSerializer,
+    VerifyOTPSerializer,
 )
 from .jwt_serializers import ToyTokenObtainPairSerializer
+
+
+def _send_telegram_message(chat_id, text):
+    """Telegram bot orqali xabar yuborish."""
+    bot_token = getattr(settings, "TELEGRAM_BOT_TOKEN", "")
+    if not bot_token:
+        return False
+    import urllib.request
+    import json
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "HTML"}).encode()
+    try:
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+        return True
+    except Exception:
+        return False
+
+
+def _generate_otp_code():
+    return "".join(random.choices(string.digits, k=6))
 
 
 class ToyTokenView(TokenObtainPairView):
@@ -308,7 +338,19 @@ class VendorAdminViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        return Vendor.objects.select_related("category").prefetch_related("reviews").all()
+        return (
+            Vendor.objects
+            .select_related("category")
+            .prefetch_related("reviews")
+            .annotate(
+                is_top_venue=Exists(HomePlacement.objects.filter(
+                    vendor_id=OuterRef("pk"), section=HomePlacement.SECTION_TOP_VENUES
+                )),
+                is_recommended=Exists(HomePlacement.objects.filter(
+                    vendor_id=OuterRef("pk"), section=HomePlacement.SECTION_RECOMMENDED
+                )),
+            )
+        )
 
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
@@ -393,3 +435,265 @@ class UserAdminView(APIView):
             user.is_active = bool(is_active)
         user.save(update_fields=["is_staff", "is_active"])
         return Response(UserAdminSerializer(user).data)
+
+
+# ─────────────────── OTP VIEWS ───────────────────
+
+class SendOTPView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        ser = SendOTPSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        phone = ser.validated_data["phone"]
+
+        # Avvalgi ishlatilmagan OTPlarni bekor qilamiz
+        PhoneOTP.objects.filter(phone=phone, is_used=False).update(is_used=True)
+
+        code = _generate_otp_code()
+        expires_at = timezone.now() + timedelta(minutes=10)
+        otp = PhoneOTP.objects.create(phone=phone, code=code, expires_at=expires_at)
+
+        bot_username = getattr(settings, "TELEGRAM_BOT_USERNAME", "ToyMakonBot")
+
+        # Deep link: foydalanuvchi bosib Telegramda "Start" tugmasini bosganda
+        # bot /start otp{id} buyrug'ini qabul qiladi va kodni yuboradi
+        bot_link = f"https://t.me/{bot_username}?start=otp{otp.id}"
+
+        resp = {
+            "phone": phone,
+            "bot_link": bot_link,
+            "bot_username": bot_username,
+            "expires_in": 600,
+        }
+        if settings.DEBUG:
+            resp["debug_code"] = code
+        return Response(resp, status=status.HTTP_200_OK)
+
+
+class VerifyOTPView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        ser = VerifyOTPSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        phone = ser.validated_data["phone"]
+        code = ser.validated_data["code"]
+
+        otp = (
+            PhoneOTP.objects.filter(phone=phone, is_used=False)
+            .order_by("-created_at")
+            .first()
+        )
+        if not otp:
+            return Response(
+                {"detail": "Tasdiqlash kodi topilmadi. Qayta so'rang."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if otp.is_expired():
+            return Response(
+                {"detail": "Tasdiqlash kodi muddati tugagan. Qayta so'rang."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if otp.code != code:
+            return Response(
+                {"detail": "Tasdiqlash kodi noto'g'ri."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reg_token = uuid.uuid4().hex
+        otp.reg_token = reg_token
+        otp.save(update_fields=["reg_token"])
+
+        return Response({"phone": phone, "reg_token": reg_token})
+
+
+class CompleteRegistrationView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        ser = CompleteRegistrationSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        phone = ser.validated_data["phone"]
+        reg_token = ser.validated_data["reg_token"]
+
+        otp = PhoneOTP.objects.filter(
+            phone=phone, reg_token=reg_token, is_used=False
+        ).first()
+
+        if not otp or otp.is_expired():
+            return Response(
+                {"detail": "Tasdiqlash sessiyasi yaroqsiz. Qayta boshlang."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        username = ser.validated_data["username"]
+        password = ser.validated_data["password"]
+        full_name = ser.validated_data.get("full_name", "")
+
+        with transaction.atomic():
+            user = User.objects.create_user(username=username, password=password)
+            from .models import UserProfile
+            UserProfile.objects.update_or_create(
+                user=user,
+                defaults={"full_name": full_name.strip(), "phone": phone},
+            )
+            otp.is_used = True
+            otp.save(update_fields=["is_used"])
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": UserSerializer(user).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class TelegramWebhookView(APIView):
+    """Telegram bot webhook — foydalanuvchidan /verify {phone} buyrug'ini qabul qiladi."""
+
+    permission_classes = []
+
+    def post(self, request):
+        bot_token = getattr(settings, "TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            return Response({"ok": True})
+
+        update = request.data
+        message = update.get("message") or update.get("edited_message")
+        if not message:
+            return Response({"ok": True})
+
+        chat_id = message.get("chat", {}).get("id")
+        text = (message.get("text") or "").strip()
+
+        if not chat_id:
+            return Response({"ok": True})
+
+        if text.startswith("/start"):
+            # Deep link: /start otp{id}
+            parts = text.split(maxsplit=1)
+            param = parts[1].strip() if len(parts) > 1 else ""
+            if param.startswith("otp"):
+                try:
+                    otp_id = int(param[3:])
+                    otp = PhoneOTP.objects.get(id=otp_id, is_used=False)
+                except (ValueError, PhoneOTP.DoesNotExist):
+                    _send_telegram_message(
+                        chat_id,
+                        "❌ Tasdiqlash kodi topilmadi yoki muddati o'tgan. Qaytadan ro'yxatdan o'ting."
+                    )
+                    return Response({"ok": True})
+
+                if otp.is_expired():
+                    _send_telegram_message(
+                        chat_id,
+                        "⏰ Tasdiqlash kodining muddati o'tib ketdi. Qaytadan ro'yxatdan o'ting."
+                    )
+                    return Response({"ok": True})
+
+                otp.telegram_chat_id = chat_id
+                otp.save(update_fields=["telegram_chat_id"])
+
+                _send_telegram_message(
+                    chat_id,
+                    f"🔐 Sizning tasdiqlash kodingiz:\n\n"
+                    f"<b>{otp.code}</b>\n\n"
+                    f"Bu kodni ToyMakon saytiga kiriting.\n"
+                    f"Kod 10 daqiqa amal qiladi."
+                )
+            else:
+                welcome = (
+                    f"👋 Assalomu alaykum! <b>ToyMakon</b> botiga xush kelibsiz!\n\n"
+                    f"Bu bot orqali ro'yxatdan o'tish uchun tasdiqlash kodini olasiz.\n"
+                    f"ToyMakon saytiga o'ting va ro'yxatdan o'tish tugmasini bosing."
+                )
+                _send_telegram_message(chat_id, welcome)
+            return Response({"ok": True})
+
+        _send_telegram_message(
+            chat_id,
+            "❓ Buyruq tanilmadi. ToyMakon saytidan ro'yxatdan o'ting."
+        )
+
+        return Response({"ok": True})
+
+
+# ─────────────────── RECOMMENDED MANAGE ───────────────────
+
+class RecommendedManageView(APIView):
+    """Tavsiya qilamiz vendorlarni boshqarish (faqat admin/staff)."""
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        placements = HomePlacement.objects.filter(
+            section=HomePlacement.SECTION_RECOMMENDED
+        ).select_related("vendor", "vendor__category").order_by("sort_order")
+        items = [
+            {
+                "vendor_code": hp.vendor.code,
+                "vendor_name": hp.vendor.name,
+                "vendor_image": hp.vendor.image or "",
+                "vendor_category": hp.vendor.category.title if hp.vendor.category else "",
+                "sort_order": hp.sort_order,
+            }
+            for hp in placements
+            if hp.vendor.is_published
+        ]
+        all_vendors = Vendor.objects.filter(is_published=True).order_by("category", "name")
+        vendor_options = [
+            {
+                "code": v.code,
+                "name": v.name,
+                "category": v.category.title if v.category else "",
+            }
+            for v in all_vendors
+        ]
+        return Response({"items": items, "vendor_options": vendor_options})
+
+    def put(self, request):
+        payload = request.data.get("items", [])
+        if not isinstance(payload, list):
+            return Response({"detail": "`items` list bo'lishi kerak."}, status=status.HTTP_400_BAD_REQUEST)
+
+        normalized = []
+        seen = set()
+        for idx, raw in enumerate(payload):
+            if not isinstance(raw, dict):
+                return Response({"detail": f"{idx + 1}-element noto'g'ri."}, status=status.HTTP_400_BAD_REQUEST)
+            code = str(raw.get("vendor_code", "")).strip()
+            if not code:
+                return Response({"detail": f"{idx + 1}-elementda vendor_code yo'q."}, status=status.HTTP_400_BAD_REQUEST)
+            if code in seen:
+                return Response({"detail": f"Vendor takrorlangan: {code}"}, status=status.HTTP_400_BAD_REQUEST)
+            seen.add(code)
+            normalized.append({"vendor_code": code, "sort_order": idx})
+
+        allowed = {
+            v.code: v
+            for v in Vendor.objects.filter(
+                code__in=[it["vendor_code"] for it in normalized],
+                is_published=True,
+            )
+        }
+        missing = [it["vendor_code"] for it in normalized if it["vendor_code"] not in allowed]
+        if missing:
+            return Response({"detail": f"Topilmadi: {', '.join(missing)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            HomePlacement.objects.filter(section=HomePlacement.SECTION_RECOMMENDED).delete()
+            HomePlacement.objects.bulk_create([
+                HomePlacement(
+                    section=HomePlacement.SECTION_RECOMMENDED,
+                    sort_order=it["sort_order"],
+                    vendor=allowed[it["vendor_code"]],
+                )
+                for it in normalized
+            ])
+
+        return self.get(request)

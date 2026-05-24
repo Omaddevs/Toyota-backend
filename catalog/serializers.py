@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Category, PromoPost, UserProfile, Vendor, VendorReview
+from .models import Category, PhoneOTP, PromoPost, UserProfile, Vendor, VendorReview
 
 
 
@@ -49,6 +49,8 @@ class VendorSerializer(serializers.ModelSerializer):
     rating = serializers.FloatField()
     reviews = VendorReviewPublicSerializer(many=True, read_only=True)
     id = serializers.CharField(source="code", read_only=True)
+    is_top_venue = serializers.SerializerMethodField()
+    is_recommended = serializers.SerializerMethodField()
 
     class Meta:
         model = Vendor
@@ -78,6 +80,11 @@ class VendorSerializer(serializers.ModelSerializer):
             "view_count",
             "is_published",
             "sort_order",
+            "lat",
+            "lng",
+            "map_link",
+            "is_top_venue",
+            "is_recommended",
         )
 
     def get_image(self, obj):
@@ -86,6 +93,12 @@ class VendorSerializer(serializers.ModelSerializer):
             url = obj.image_upload.url
             return request.build_absolute_uri(url) if request else url
         return obj.image
+
+    def get_is_top_venue(self, obj):
+        return getattr(obj, "is_top_venue", False)
+
+    def get_is_recommended(self, obj):
+        return getattr(obj, "is_recommended", False)
 
 
 class VendorListSerializer(serializers.ModelSerializer):
@@ -125,6 +138,9 @@ class VendorListSerializer(serializers.ModelSerializer):
             "description",
             "specs",
             "view_count",
+            "lat",
+            "lng",
+            "map_link",
         )
 
     def get_image(self, obj):
@@ -192,6 +208,7 @@ class VendorWriteSerializer(serializers.ModelSerializer):
             "footer_line", "footer_icon", "phone", "telegram",
             "tagline", "location", "description", "specs",
             "is_published", "sort_order",
+            "lat", "lng", "map_link",
         )
         extra_kwargs = {
             "slug": {"required": False, "allow_blank": True},
@@ -208,6 +225,9 @@ class VendorWriteSerializer(serializers.ModelSerializer):
             "tagline": {"required": False, "allow_blank": True},
             "location": {"required": False, "allow_blank": True},
             "description": {"required": False, "allow_blank": True},
+            "map_link": {"required": False, "allow_blank": True},
+            "lat": {"required": False, "allow_null": True},
+            "lng": {"required": False, "allow_null": True},
         }
 
     def validate_code(self, value):
@@ -266,6 +286,41 @@ class UserAdminSerializer(serializers.ModelSerializer):
     def get_phone(self, obj):
         p = getattr(obj, "profile", None)
         return (getattr(p, "phone", None) or "").strip()
+
+
+class SendOTPSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=32)
+
+    def validate_phone(self, value):
+        import re
+        clean = re.sub(r"[\s\-\(\)]", "", value)
+        if not re.match(r"^\+?[0-9]{9,15}$", clean):
+            raise serializers.ValidationError("Telefon raqam noto'g'ri formatda.")
+        return clean
+
+
+class VerifyOTPSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=32)
+    code = serializers.CharField(max_length=6, min_length=4)
+
+
+class CompleteRegistrationSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=32)
+    reg_token = serializers.CharField(max_length=64)
+    username = serializers.CharField(max_length=150)
+    password = serializers.CharField(write_only=True, min_length=6, max_length=128)
+    password_confirm = serializers.CharField(write_only=True, min_length=6, max_length=128)
+    full_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+    def validate_username(self, value):
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("Bu foydalanuvchi nomi band.")
+        return value
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password_confirm"]:
+            raise serializers.ValidationError({"password_confirm": "Parollar mos emas."})
+        return attrs
 
 
 class RegisterSerializer(serializers.Serializer):

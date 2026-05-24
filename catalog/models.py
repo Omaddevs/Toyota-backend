@@ -83,7 +83,15 @@ class Vendor(models.Model):
         "story video URL (YouTube)",
         max_length=2048,
         blank=True,
-        help_text="Top to‘yxonalar story popup uchun YouTube link.",
+        help_text="Top to’yxonalar story popup uchun YouTube link.",
+    )
+    lat = models.FloatField("kenglik (latitude)", null=True, blank=True)
+    lng = models.FloatField("uzunlik (longitude)", null=True, blank=True)
+    map_link = models.URLField(
+        "Xarita havolasi (Yandex/Google Maps)",
+        max_length=2048,
+        blank=True,
+        help_text="Yandex Maps yoki Google Maps havolasi. Avtomatik lat/lng ajratiladi.",
     )
     gallery = models.JSONField(
         "galereya (URL ro‘yxati)",
@@ -310,6 +318,35 @@ class MarryMeVendor(Vendor):
         proxy = True
         verbose_name = "Marry me joy va taklif"
         verbose_name_plural = "Marry me joy va taklif"
+
+
+class PhoneOTP(models.Model):
+    """Telefon raqami orqali Telegram OTP tasdiqlash."""
+
+    phone = models.CharField("telefon", max_length=32, db_index=True)
+    code = models.CharField("OTP kod", max_length=6)
+    telegram_chat_id = models.BigIntegerField("Telegram chat ID", null=True, blank=True)
+    reg_token = models.CharField(
+        "reg token (OTP tasdiqlangandan keyin)",
+        max_length=64,
+        blank=True,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField("amal qilish muddati")
+    is_used = models.BooleanField("ishlatilgan", default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Telefon OTP"
+        verbose_name_plural = "Telefon OTPlar"
+
+    def __str__(self):
+        return f"{self.phone} — {self.code}"
+
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
 
 
 class UserProfile(models.Model):
