@@ -119,6 +119,13 @@ elif os.environ.get("POSTGRES_DB"):
         }
     }
 elif os.environ.get("MYSQL_DATABASE"):
+    _mysql_opts = {
+        "charset": "utf8mb4",
+        "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
+    }
+    _mysql_socket = os.environ.get("MYSQL_SOCKET", "").strip()
+    if _mysql_socket:
+        _mysql_opts["unix_socket"] = _mysql_socket
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
@@ -127,10 +134,7 @@ elif os.environ.get("MYSQL_DATABASE"):
             "PASSWORD": os.environ.get("MYSQL_PASSWORD", ""),
             "HOST": os.environ.get("MYSQL_HOST", "127.0.0.1"),
             "PORT": os.environ.get("MYSQL_PORT", "3306"),
-            "OPTIONS": {
-                "charset": "utf8mb4",
-                "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
-            },
+            "OPTIONS": _mysql_opts,
         }
     }
 else:

@@ -4,6 +4,9 @@ from rest_framework import serializers
 from .models import Category, PromoPost, UserProfile, Vendor, VendorReview
 
 
+
+
+
 class CategoryPublicSerializer(serializers.ModelSerializer):
     """Frontend `catalog.js` bilan mos kalitlar."""
 
@@ -73,6 +76,8 @@ class VendorSerializer(serializers.ModelSerializer):
             "description",
             "specs",
             "view_count",
+            "is_published",
+            "sort_order",
         )
 
     def get_image(self, obj):
@@ -162,6 +167,97 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "is_staff",
         )
+
+    def get_full_name(self, obj):
+        p = getattr(obj, "profile", None)
+        return (getattr(p, "full_name", None) or "").strip()
+
+    def get_phone(self, obj):
+        p = getattr(obj, "profile", None)
+        return (getattr(p, "phone", None) or "").strip()
+
+
+class VendorWriteSerializer(serializers.ModelSerializer):
+    """Admin: vendor yaratish va tahrirlash."""
+
+    gallery = serializers.JSONField(required=False, default=list)
+    specs = serializers.JSONField(required=False, default=list)
+
+    class Meta:
+        model = Vendor
+        fields = (
+            "code", "category", "slug", "name", "district",
+            "image", "story_video_url", "gallery",
+            "price_label", "price_note", "badge",
+            "footer_line", "footer_icon", "phone", "telegram",
+            "tagline", "location", "description", "specs",
+            "is_published", "sort_order",
+        )
+        extra_kwargs = {
+            "slug": {"required": False, "allow_blank": True},
+            "district": {"required": False, "allow_blank": True},
+            "image": {"required": False, "allow_blank": True},
+            "story_video_url": {"required": False, "allow_blank": True},
+            "price_label": {"required": False, "allow_blank": True},
+            "price_note": {"required": False, "allow_blank": True},
+            "badge": {"required": False, "allow_blank": True, "allow_null": True},
+            "footer_line": {"required": False, "allow_blank": True},
+            "footer_icon": {"required": False, "allow_blank": True},
+            "phone": {"required": False, "allow_blank": True},
+            "telegram": {"required": False, "allow_blank": True},
+            "tagline": {"required": False, "allow_blank": True},
+            "location": {"required": False, "allow_blank": True},
+            "description": {"required": False, "allow_blank": True},
+        }
+
+    def validate_code(self, value):
+        instance = getattr(self, "instance", None)
+        qs = Vendor.objects.filter(code=value)
+        if instance:
+            qs = qs.exclude(pk=instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("Bu kod allaqachon mavjud.")
+        return value
+
+
+class CategoryWriteSerializer(serializers.ModelSerializer):
+    """Admin: kategoriya yaratish va tahrirlash."""
+
+    class Meta:
+        model = Category
+        fields = (
+            "code", "slug", "title", "short_label", "subtitle",
+            "icon", "search_hint", "zone", "sort_order", "is_active",
+        )
+        extra_kwargs = {
+            "subtitle": {"required": False, "allow_blank": True},
+            "icon": {"required": False, "allow_blank": True},
+            "search_hint": {"required": False, "allow_blank": True},
+        }
+
+
+class PromoPostWriteSerializer(serializers.ModelSerializer):
+    """Admin: promo post yaratish va tahrirlash."""
+
+    class Meta:
+        model = PromoPost
+        fields = (
+            "slug", "category", "badge", "title", "path",
+            "background_url", "sort_order", "is_active",
+        )
+        extra_kwargs = {
+            "badge": {"required": False, "allow_blank": True},
+        }
+
+
+class UserAdminSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    phone = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ("id", "username", "email", "first_name", "last_name",
+                  "full_name", "phone", "is_staff", "is_active", "date_joined")
 
     def get_full_name(self, obj):
         p = getattr(obj, "profile", None)

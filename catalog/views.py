@@ -1,11 +1,16 @@
+import os
+
+from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Count, F, Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .filters import CategoryFilter, VendorFilter
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,11 +20,15 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import Category, HomePlacement, PromoPost, Vendor, VendorReview
 from .serializers import (
     CategoryPublicSerializer,
+    CategoryWriteSerializer,
     PromoPostSerializer,
+    PromoPostWriteSerializer,
     RegisterSerializer,
+    UserAdminSerializer,
     UserSerializer,
     VendorListSerializer,
     VendorSerializer,
+    VendorWriteSerializer,
 )
 from .jwt_serializers import ToyTokenObtainPairSerializer
 
@@ -87,6 +96,17 @@ class VendorViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action == "retrieve":
             return VendorSerializer
         return VendorListSerializer
+
+    @action(detail=True, methods=["post"], url_path="view", permission_classes=[])
+    def record_view(self, request, code=None):
+        """Sahifa ochilganda ko'rishlar sonini +1 qiladi va yangi sonni qaytaradi."""
+        updated = Vendor.objects.filter(
+            code=code, is_published=True
+        ).update(view_count=F("view_count") + 1)
+        if not updated:
+            return Response({"detail": "Topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        new_count = Vendor.objects.filter(code=code).values_list("view_count", flat=True).first() or 0
+        return Response({"view_count": new_count})
 
 class PromoPostViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PromoPost.objects.filter(is_active=True)
@@ -242,3 +262,134 @@ class TopVenuesManageView(APIView):
 @permission_classes([])
 def health(request):
     return Response({"status": "ok", "service": "toymakon-backend"})
+
+
+class IsStaffOrAdmin(IsAdminUser):
+    def has_permission(self, request, view):
+        return bool(request.user and (request.user.is_staff or request.user.is_superuser))
+
+
+class AdminStatsView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffOrAdmin]
+
+    def get(self, request):
+        vendor_total = Vendor.objects.count()
+        vendor_published = Vendor.objects.filter(is_published=True).count()
+        category_total = Category.objects.count()
+        promo_total = PromoPost.objects.filter(is_active=True).count()
+        user_total = User.objects.count()
+        review_total = VendorReview.objects.count()
+
+        by_category = (
+            Category.objects.annotate(cnt=Count("vendors"))
+            .values("code", "title", "short_label", "cnt")
+            .order_by("sort_order")
+        )
+
+        return Response({
+            "vendor_total": vendor_total,
+            "vendor_published": vendor_published,
+            "category_total": category_total,
+            "promo_total": promo_total,
+            "user_total": user_total,
+            "review_total": review_total,
+            "by_category": list(by_category),
+        })
+
+
+class VendorAdminViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, IsStaffOrAdmin]
+    lookup_field = "code"
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = VendorFilter
+    search_fields = ["name", "district", "code", "phone"]
+    ordering_fields = ["name", "sort_order", "created_at", "category"]
+    ordering = ["category", "sort_order", "name"]
+    pagination_class = None
+
+    def get_queryset(self):
+        return Vendor.objects.select_related("category").prefetch_related("reviews").all()
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return VendorWriteSerializer
+        return VendorSerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["request"] = self.request
+        return ctx
+
+
+class CategoryAdminViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, IsStaffOrAdmin]
+    queryset = Category.objects.annotate(vendor_count=Count("vendors")).order_by("zone", "sort_order")
+    lookup_field = "code"
+    pagination_class = None
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return CategoryWriteSerializer
+        return CategoryPublicSerializer
+
+
+class PromoPostAdminViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, IsStaffOrAdmin]
+    queryset = PromoPost.objects.select_related("category").order_by("sort_order")
+    lookup_field = "slug"
+    pagination_class = None
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return PromoPostWriteSerializer
+        return PromoPostSerializer
+
+
+class ImageUploadView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffOrAdmin]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"detail": "Fayl yuklanmadi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+        if file.content_type not in allowed:
+            return Response(
+                {"detail": "Faqat JPG, PNG, WebP va GIF formatlar qabul qilinadi."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from django.core.files.storage import default_storage
+        from django.core.files.base import ContentFile
+
+        ext = os.path.splitext(file.name)[1].lower() or ".jpg"
+        import uuid as uuid_mod
+        fname = f"vendors/{uuid_mod.uuid4().hex}{ext}"
+        path = default_storage.save(fname, ContentFile(file.read()))
+        url = request.build_absolute_uri(f"/media/{path}")
+        return Response({"url": url}, status=status.HTTP_201_CREATED)
+
+
+class UserAdminView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffOrAdmin]
+
+    def get(self, request):
+        users = User.objects.select_related("profile").order_by("-date_joined")
+        data = UserAdminSerializer(users, many=True).data
+        return Response(data)
+
+    def patch(self, request, user_id):
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "Topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        is_staff = request.data.get("is_staff")
+        is_active = request.data.get("is_active")
+        if is_staff is not None:
+            user.is_staff = bool(is_staff)
+        if is_active is not None:
+            user.is_active = bool(is_active)
+        user.save(update_fields=["is_staff", "is_active"])
+        return Response(UserAdminSerializer(user).data)
