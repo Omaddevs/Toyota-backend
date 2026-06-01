@@ -162,9 +162,7 @@ class HomeView(APIView):
         top_vendors = []
         for hp in top_ids:
             v = (
-                Vendor.objects.filter(
-                    pk=hp.vendor_id, is_published=True, category_id="venue"
-                )
+                Vendor.objects.filter(pk=hp.vendor_id, is_published=True)
                 .select_related("category")
                 .first()
             )
@@ -196,6 +194,14 @@ class TopVenuesManageView(APIView):
 
     permission_classes = [IsAuthenticated, IsAdminUser]
 
+    @staticmethod
+    def _vendor_image(request, vendor):
+        """Story doirasida ko'rinadigan rasmning to'liq URL manzili."""
+        if vendor.image_upload:
+            url = vendor.image_upload.url
+            return request.build_absolute_uri(url) if request else url
+        return vendor.image or ""
+
     def get(self, request):
         placements = HomePlacement.objects.filter(
             section=HomePlacement.SECTION_TOP_VENUES
@@ -206,14 +212,23 @@ class TopVenuesManageView(APIView):
                 "vendor_name": hp.vendor.name,
                 "sort_order": hp.sort_order,
                 "story_video_url": hp.vendor.story_video_url or "",
+                "image": self._vendor_image(request, hp.vendor),
             }
             for hp in placements
-            if hp.vendor.is_published and hp.vendor.category_id == "venue"
+            if hp.vendor.is_published
         ]
         all_venues = Vendor.objects.filter(
-            is_published=True, category_id="venue"
-        ).order_by("name")
-        venue_options = [{"code": v.code, "name": v.name} for v in all_venues]
+            is_published=True
+        ).select_related("category").order_by("name")
+        venue_options = [
+            {
+                "code": v.code,
+                "name": v.name,
+                "category": v.category.title if v.category_id else "",
+                "image": self._vendor_image(request, v),
+            }
+            for v in all_venues
+        ]
         return Response({"items": items, "venue_options": venue_options})
 
     def put(self, request):
@@ -248,6 +263,7 @@ class TopVenuesManageView(APIView):
                     "vendor_code": code,
                     "sort_order": idx,
                     "story_video_url": str(raw.get("story_video_url", "")).strip(),
+                    "image": str(raw.get("image", "")).strip(),
                 }
             )
 
@@ -256,22 +272,34 @@ class TopVenuesManageView(APIView):
             for v in Vendor.objects.filter(
                 code__in=[it["vendor_code"] for it in normalized],
                 is_published=True,
-                category_id="venue",
             )
         }
         missing = [it["vendor_code"] for it in normalized if it["vendor_code"] not in allowed]
         if missing:
             return Response(
-                {"detail": f"Topilmadi yoki venue emas: {', '.join(missing)}"},
+                {"detail": f"Topilmadi yoki e'lon qilinmagan: {', '.join(missing)}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         with transaction.atomic():
             for it in normalized:
                 vendor = allowed[it["vendor_code"]]
+                update_fields = []
                 if vendor.story_video_url != it["story_video_url"]:
                     vendor.story_video_url = it["story_video_url"]
-                    vendor.save(update_fields=["story_video_url", "updated_at"])
+                    update_fields.append("story_video_url")
+                # Story doirasi rasmi: admin yangi rasm bersa va u hozirgisidan farq qilsa,
+                # uni vendor.image ga yozamiz (image_upload ustun bo'lmasligi uchun tozalaymiz).
+                new_image = it["image"]
+                if new_image and new_image != self._vendor_image(request, vendor):
+                    vendor.image = new_image
+                    update_fields.append("image")
+                    if vendor.image_upload:
+                        vendor.image_upload = None
+                        update_fields.append("image_upload")
+                if update_fields:
+                    update_fields.append("updated_at")
+                    vendor.save(update_fields=update_fields)
 
             HomePlacement.objects.filter(section=HomePlacement.SECTION_TOP_VENUES).delete()
             HomePlacement.objects.bulk_create(

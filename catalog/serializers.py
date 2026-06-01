@@ -230,6 +230,16 @@ class VendorWriteSerializer(serializers.ModelSerializer):
             "lng": {"required": False, "allow_null": True},
         }
 
+    def to_internal_value(self, data):
+        # Bo'sh satr ("") yoki faqat probel kelganda lat/lng ni None ga aylantiramiz,
+        # aks holda DRF FloatField "A valid number is required" xatosini beradi.
+        if isinstance(data, dict):
+            data = data.copy()
+            for key in ("lat", "lng"):
+                if key in data and isinstance(data[key], str) and data[key].strip() == "":
+                    data[key] = None
+        return super().to_internal_value(data)
+
     def validate_code(self, value):
         instance = getattr(self, "instance", None)
         qs = Vendor.objects.filter(code=value)
